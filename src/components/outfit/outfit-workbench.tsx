@@ -35,6 +35,10 @@ const DEFAULT_FORM: OutfitFormState = {
   uploadedImage: null,
 };
 
+const TARGET_IMAGE_BYTES = 500 * 1024;
+const MAX_IMAGE_DIMENSION = 1600;
+const JPEG_QUALITIES = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4] as const;
+
 function toHistoryEntry(form: OutfitFormState): HistoryEntry {
   return {
     scene: form.scene,
@@ -204,6 +208,63 @@ export function OutfitWorkbench() {
     });
   }
 
+  function estimateDataUrlBytes(dataUrl: string) {
+    const base64 = dataUrl.split(",")[1] ?? "";
+    const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+    return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+  }
+
+  async function loadImageElement(dataUrl: string) {
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new window.Image();
+
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Failed to decode image"));
+      image.src = dataUrl;
+    });
+  }
+
+  async function compressUploadedImage(file: File) {
+    const originalDataUrl = await readImageAsDataUrl(file);
+
+    if (estimateDataUrlBytes(originalDataUrl) <= TARGET_IMAGE_BYTES) {
+      return {
+        dataUrl: originalDataUrl,
+        mimeType: file.type,
+      };
+    }
+
+    const image = await loadImageElement(originalDataUrl);
+    const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
+    const scale = Math.min(1, MAX_IMAGE_DIMENSION / longestSide);
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Canvas is not available");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    for (const quality of JPEG_QUALITIES) {
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+
+      if (estimateDataUrlBytes(dataUrl) <= TARGET_IMAGE_BYTES) {
+        return {
+          dataUrl,
+          mimeType: "image/jpeg",
+        };
+      }
+    }
+
+    throw new Error("图片压缩后仍超过 500KB");
+  }
+
   // 处理本地图片上传，供多模态推荐使用。
   async function handleImageChange(file: File | null) {
     if (!file) {
@@ -221,19 +282,19 @@ export function OutfitWorkbench() {
     }
 
     try {
-      const dataUrl = await readImageAsDataUrl(file);
+      const compressedImage = await compressUploadedImage(file);
       setForm((current) => ({
         ...current,
         uploadedImage: {
-          dataUrl,
+          dataUrl: compressedImage.dataUrl,
           name: file.name,
-          mimeType: file.type,
+          mimeType: compressedImage.mimeType,
         },
       }));
       setImageError(null);
     } catch (error) {
       console.error("Failed to load image", error);
-      setImageError("图片读取失败，请重试。");
+      setImageError(error instanceof Error ? error.message : "图片读取失败，请重试。");
     }
   }
 
