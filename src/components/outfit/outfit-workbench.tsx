@@ -36,7 +36,7 @@ const DEFAULT_FORM: OutfitFormState = {
 };
 
 const TARGET_IMAGE_BYTES = 500 * 1024;
-const MAX_IMAGE_DIMENSION = 1600;
+const MAX_IMAGE_DIMENSIONS = [1600, 1280, 1024, 896, 768, 640, 512] as const;
 const JPEG_QUALITIES = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4] as const;
 
 function toHistoryEntry(form: OutfitFormState): HistoryEntry {
@@ -208,10 +208,8 @@ export function OutfitWorkbench() {
     });
   }
 
-  function estimateDataUrlBytes(dataUrl: string) {
-    const base64 = dataUrl.split(",")[1] ?? "";
-    const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
-    return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+  function estimatePayloadBytes(value: string) {
+    return new TextEncoder().encode(value).length;
   }
 
   async function loadImageElement(dataUrl: string) {
@@ -227,7 +225,7 @@ export function OutfitWorkbench() {
   async function compressUploadedImage(file: File) {
     const originalDataUrl = await readImageAsDataUrl(file);
 
-    if (estimateDataUrlBytes(originalDataUrl) <= TARGET_IMAGE_BYTES) {
+    if (estimatePayloadBytes(originalDataUrl) <= TARGET_IMAGE_BYTES) {
       return {
         dataUrl: originalDataUrl,
         mimeType: file.type,
@@ -236,29 +234,32 @@ export function OutfitWorkbench() {
 
     const image = await loadImageElement(originalDataUrl);
     const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
-    const scale = Math.min(1, MAX_IMAGE_DIMENSION / longestSide);
-    const width = Math.max(1, Math.round(image.naturalWidth * scale));
-    const height = Math.max(1, Math.round(image.naturalHeight * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
 
-    const context = canvas.getContext("2d");
+    for (const maxDimension of MAX_IMAGE_DIMENSIONS) {
+      const scale = Math.min(1, maxDimension / longestSide);
+      const width = Math.max(1, Math.round(image.naturalWidth * scale));
+      const height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
 
-    if (!context) {
-      throw new Error("Canvas is not available");
-    }
+      const context = canvas.getContext("2d");
 
-    context.drawImage(image, 0, 0, width, height);
+      if (!context) {
+        throw new Error("Canvas is not available");
+      }
 
-    for (const quality of JPEG_QUALITIES) {
-      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      context.drawImage(image, 0, 0, width, height);
 
-      if (estimateDataUrlBytes(dataUrl) <= TARGET_IMAGE_BYTES) {
-        return {
-          dataUrl,
-          mimeType: "image/jpeg",
-        };
+      for (const quality of JPEG_QUALITIES) {
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+
+        if (estimatePayloadBytes(dataUrl) <= TARGET_IMAGE_BYTES) {
+          return {
+            dataUrl,
+            mimeType: "image/jpeg",
+          };
+        }
       }
     }
 
