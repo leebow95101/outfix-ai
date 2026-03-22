@@ -20,9 +20,6 @@ export function ExplanationPanel({
       <div className="mt-1 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-slate-900">AI 推荐解释</h2>
-          <p className="mt-2 text-sm text-slate-500">
-            点击右侧任意卡片，这里的说明会像对话模型一样流式更新。
-          </p>
         </div>
         {recommendation ? (
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">

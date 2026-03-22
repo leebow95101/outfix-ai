@@ -28,9 +28,6 @@ export function ExampleImagePanel({
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="mt-1 text-xl font-semibold text-slate-900">穿搭示例图</h2>
-          <p className="mt-2 text-sm text-slate-500">
-            基于当前选中的搭配，调用 Wanx 生成一张视觉示意图。
-          </p>
         </div>
         <button
           type="button"
